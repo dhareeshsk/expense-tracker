@@ -4,12 +4,21 @@ import { prisma } from "@/lib/prisma";
 import { requireUserId } from "@/lib/current-user";
 
 const transactionSchema = z.object({
-  type: z.enum(["income", "expense", "investment"]).optional(),
-  amount: z.number().positive().finite().optional(),
-  categoryId: z.string().min(1).optional(),
-  date: z.coerce.date().optional(),
+  transactionTypeId: z.string().min(1, "Transaction type is required").optional(),
+  amount: z
+    .number({ error: "Amount is required" })
+    .positive("Amount must be greater than 0")
+    .finite("Amount must be a valid number")
+    .optional(),
+  categoryId: z.string().min(1, "Category is required").optional(),
+  date: z.coerce.date({ error: "Date is required" }).optional(),
   note: z.string().trim().max(500).optional().nullable(),
-  paymentMethod: z.string().trim().max(50).optional().nullable(),
+  paymentMethod: z
+    .string()
+    .trim()
+    .min(1, "Payment method is required")
+    .max(50, "Payment method must be 50 characters or fewer")
+    .optional(),
   householdId: z.string().min(1).optional().nullable(),
 });
 
@@ -56,10 +65,19 @@ export async function PUT(
     }
   }
 
+  if (parsed.data.transactionTypeId) {
+    const transactionType = await prisma.transactionType.findUnique({
+      where: { id: parsed.data.transactionTypeId },
+    });
+    if (!transactionType || transactionType.userId !== userId) {
+      return NextResponse.json({ error: "Invalid transaction type" }, { status: 400 });
+    }
+  }
+
   const updated = await prisma.transaction.update({
     where: { id },
     data: parsed.data,
-    include: { category: true },
+    include: { category: true, transactionType: true },
   });
 
   return NextResponse.json(updated);

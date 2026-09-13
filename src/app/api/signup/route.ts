@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { DEFAULT_CATEGORIES } from "@/lib/default-categories";
+import { DEFAULT_TRANSACTION_TYPES } from "@/lib/default-transaction-types";
 
 const signupSchema = z.object({
   name: z.string().trim().min(1).max(100).optional(),
@@ -43,6 +44,13 @@ export async function POST(request: Request) {
           name: category.name,
           color: category.color,
           icon: category.icon,
+          isDefault: true,
+        })),
+      },
+      transactionTypes: {
+        create: DEFAULT_TRANSACTION_TYPES.map((type) => ({
+          name: type.name,
+          icon: type.icon,
           isDefault: true,
         })),
       },

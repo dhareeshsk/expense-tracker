@@ -4,9 +4,16 @@ import { prisma } from "@/lib/prisma";
 import { requireUserId } from "@/lib/current-user";
 
 const budgetSchema = z.object({
-  categoryId: z.string().min(1),
-  monthlyLimit: z.number().positive().finite(),
-  alertThreshold: z.number().int().min(1).max(200).optional(),
+  categoryId: z.string().min(1, "Category is required"),
+  monthlyLimit: z
+    .number({ error: "Monthly limit is required" })
+    .positive("Monthly limit must be greater than 0")
+    .finite("Monthly limit must be a valid number"),
+  alertThreshold: z
+    .number({ error: "Alert threshold is required" })
+    .int("Alert threshold must be a whole number")
+    .min(1, "Alert threshold must be at least 1%")
+    .max(200, "Alert threshold must be 200% or less"),
 });
 
 function currentMonthRange() {
@@ -32,7 +39,11 @@ export async function GET() {
     }),
     prisma.transaction.groupBy({
       by: ["categoryId"],
-      where: { userId, type: "expense", date: { gte: start, lt: end } },
+      where: {
+        userId,
+        transactionType: { name: "Expense" },
+        date: { gte: start, lt: end },
+      },
       _sum: { amount: true },
     }),
   ]);
@@ -70,21 +81,22 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid category" }, { status: 400 });
   }
 
-  const budget = await prisma.budget.upsert({
-    where: {
-      userId_categoryId: { userId, categoryId: parsed.data.categoryId },
-    },
-    create: {
+  const existing = await prisma.budget.findUnique({
+    where: { userId_categoryId: { userId, categoryId: parsed.data.categoryId } },
+  });
+  if (existing) {
+    return NextResponse.json(
+      { error: "A budget for this category already exists — edit it instead" },
+      { status: 409 },
+    );
+  }
+
+  const budget = await prisma.budget.create({
+    data: {
       userId,
       categoryId: parsed.data.categoryId,
       monthlyLimit: parsed.data.monthlyLimit,
-      alertThreshold: parsed.data.alertThreshold ?? 80,
-    },
-    update: {
-      monthlyLimit: parsed.data.monthlyLimit,
-      ...(parsed.data.alertThreshold !== undefined
-        ? { alertThreshold: parsed.data.alertThreshold }
-        : {}),
+      alertThreshold: parsed.data.alertThreshold,
     },
     include: { category: true },
   });

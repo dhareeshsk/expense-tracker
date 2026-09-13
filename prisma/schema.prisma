@@ -1,0 +1,116 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  name         String?
+  email        String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+
+  transactions Transaction[]
+  categories   Category[]
+  budgets      Budget[]
+  memberships  HouseholdMember[]
+}
+
+model Household {
+  id        String   @id @default(cuid())
+  name      String
+  createdAt DateTime @default(now())
+
+  members      HouseholdMember[]
+  transactions Transaction[]
+  budgets      HouseholdBudget[]
+  invites      HouseholdInvite[]
+}
+
+model HouseholdMember {
+  id          String    @id @default(cuid())
+  householdId String
+  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  joinedAt    DateTime  @default(now())
+
+  @@unique([householdId, userId])
+}
+
+model HouseholdInvite {
+  id          String    @id @default(cuid())
+  householdId String
+  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  email       String
+  createdAt   DateTime  @default(now())
+
+  @@unique([householdId, email])
+}
+
+model Category {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  color     String?
+  icon      String?
+  isDefault Boolean  @default(false)
+
+  transactions Transaction[]
+  budgets      Budget[]
+
+  @@unique([userId, name])
+}
+
+model Transaction {
+  id            String          @id @default(cuid())
+  userId        String
+  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  categoryId    String
+  category      Category        @relation(fields: [categoryId], references: [id])
+  type          TransactionType
+  amount        Decimal
+  date          DateTime
+  note          String?
+  paymentMethod String?
+  householdId   String?
+  household     Household?      @relation(fields: [householdId], references: [id])
+  createdAt     DateTime        @default(now())
+
+  @@index([userId, date])
+  @@index([householdId, date])
+}
+
+model Budget {
+  id             String   @id @default(cuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  categoryId     String
+  category       Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  monthlyLimit   Decimal
+  alertThreshold Int      @default(80)
+
+  @@unique([userId, categoryId])
+}
+
+model HouseholdBudget {
+  id             String    @id @default(cuid())
+  householdId    String
+  household      Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  categoryName   String
+  monthlyLimit   Decimal
+  alertThreshold Int       @default(80)
+
+  @@unique([householdId, categoryName])
+}
+
+enum TransactionType {
+  income
+  expense
+  investment
+}

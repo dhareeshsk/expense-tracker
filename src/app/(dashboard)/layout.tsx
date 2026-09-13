@@ -1,4 +1,5 @@
-import { NavBar } from "@/components/nav-bar";
+import { BottomNav } from "@/components/bottom-nav";
+import { AddTransactionFab } from "@/components/add-transaction-fab";
 
 export default function DashboardGroupLayout({
   children,
@@ -6,11 +7,12 @@ export default function DashboardGroupLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex min-h-screen flex-col bg-gray-50">
-      <NavBar />
-      <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-6">
+    <>
+      <main className="mx-auto w-full max-w-5xl px-4 py-6 pb-24 md:pb-6">
         {children}
       </main>
-    </div>
+      <AddTransactionFab />
+      <BottomNav />
+    </>
   );
 }

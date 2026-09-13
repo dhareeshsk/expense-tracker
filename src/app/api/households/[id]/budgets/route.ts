@@ -46,7 +46,11 @@ export async function GET(
       orderBy: { categoryName: "asc" },
     }),
     prisma.transaction.findMany({
-      where: { householdId, type: "expense", date: { gte: start, lt: end } },
+      where: {
+        householdId,
+        transactionType: { name: "Expense" },
+        date: { gte: start, lt: end },
+      },
       include: { category: true },
     }),
   ]);

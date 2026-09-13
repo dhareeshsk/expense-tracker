@@ -1,16 +1,24 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { Users } from "lucide-react";
 import type { Household, HouseholdInviteForMe } from "@/lib/types";
+import { ListSkeleton } from "@/components/skeleton";
+import { useToast } from "@/components/toast-provider";
+import { Spinner } from "@/components/spinner";
 
 export default function HouseholdsPage() {
   const [households, setHouseholds] = useState<Household[]>([]);
   const [invites, setInvites] = useState<HouseholdInviteForMe[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [name, setName] = useState("");
+  const [nameError, setNameError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const toast = useToast();
+
+  const isFormValid = useMemo(() => name.trim().length > 0, [name]);
 
   async function loadAll() {
     const [householdRes, inviteRes] = await Promise.all([
@@ -34,23 +42,32 @@ export default function HouseholdsPage() {
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+
+    if (!name.trim()) {
+      setNameError("Household name is required");
+      return;
+    }
+    setNameError(null);
     setIsSubmitting(true);
 
     const response = await fetch("/api/households", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name }),
+      body: JSON.stringify({ name: name.trim() }),
     });
     setIsSubmitting(false);
 
     if (!response.ok) {
       const body = await response.json().catch(() => null);
-      setError(body?.error ?? "Something went wrong");
+      const message = body?.error ?? "Something went wrong";
+      setError(message);
+      toast.error(message);
       return;
     }
 
     setName("");
     await loadAll();
+    toast.success("Household created");
   }
 
   async function handleAccept(inviteId: string) {
@@ -58,10 +75,11 @@ export default function HouseholdsPage() {
       method: "POST",
     });
     if (!response.ok) {
-      alert("Could not accept invite");
+      toast.error("Could not accept invite");
       return;
     }
     await loadAll();
+    toast.success("Invite accepted");
   }
 
   async function handleDecline(inviteId: string) {
@@ -69,17 +87,18 @@ export default function HouseholdsPage() {
       method: "DELETE",
     });
     if (!response.ok) {
-      alert("Could not decline invite");
+      toast.error("Could not decline invite");
       return;
     }
     await loadAll();
+    toast.success("Invite declined");
   }
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-lg font-semibold text-gray-900">Households</h1>
-        <p className="text-sm text-gray-500">
+        <h1 className="text-lg font-semibold text-text">Households</h1>
+        <p className="text-sm text-text-muted">
           Share select expenses (EMI, rent, shared bills) with family or roommates.
         </p>
       </div>
@@ -89,7 +108,7 @@ export default function HouseholdsPage() {
           {invites.map((invite) => (
             <div
               key={invite.id}
-              className="flex items-center justify-between rounded-lg border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm text-blue-900"
+              className="flex items-center justify-between rounded-lg border border-primary/30 bg-primary-soft px-4 py-2.5 text-sm text-primary"
             >
               <span>
                 You&apos;ve been invited to join{" "}
@@ -104,7 +123,7 @@ export default function HouseholdsPage() {
                 </button>
                 <button
                   onClick={() => handleDecline(invite.id)}
-                  className="font-medium text-gray-500 underline"
+                  className="font-medium text-text-muted underline"
                 >
                   Decline
                 </button>
@@ -116,56 +135,68 @@ export default function HouseholdsPage() {
 
       <form
         onSubmit={handleCreate}
-        className="flex flex-wrap items-end gap-3 rounded-lg border border-gray-200 bg-white p-4"
+        noValidate
+        className="flex flex-wrap items-end gap-3 rounded-lg border border-border bg-surface-card p-4"
       >
-        <div className="flex-1 min-w-[150px]">
-          <label className="block text-sm font-medium text-gray-700">
+        <div className="min-w-[150px] flex-1">
+          <label className="block text-sm font-medium text-text">
             New household name
           </label>
           <input
             type="text"
-            required
             placeholder="Family, Roommates..."
             value={name}
-            onChange={(e) => setName(e.target.value)}
-            className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+            onChange={(e) => {
+              setName(e.target.value);
+              setNameError(null);
+            }}
+            className="mt-1 w-full rounded-md border border-border px-3 py-2 text-sm"
           />
+          {nameError && (
+            <p className="mt-1 text-xs text-budget-critical">{nameError}</p>
+          )}
         </div>
         <button
           type="submit"
-          disabled={isSubmitting}
-          className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+          disabled={isSubmitting || !isFormValid}
+          className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary-hover disabled:opacity-50"
         >
-          Create
+          {isSubmitting && (
+            <Spinner />
+          )}
+          {isSubmitting ? "Creating..." : "Create"}
         </button>
       </form>
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p className="text-sm text-budget-critical">{error}</p>}
 
       {isLoading ? (
-        <p className="text-sm text-gray-500">Loading...</p>
+        <ListSkeleton rows={3} />
       ) : households.length === 0 ? (
-        <p className="text-sm text-gray-500">
+        <p className="text-sm text-text-muted">
           You&apos;re not part of any household yet.
         </p>
       ) : (
-        <ul className="divide-y divide-gray-200 rounded-lg border border-gray-200 bg-white">
+        <ul className="divide-y divide-border rounded-lg border border-border bg-surface-card">
           {households.map((household) => (
             <li key={household.id} className="px-4 py-3">
               <Link
                 href={`/households/${household.id}`}
                 className="flex items-center justify-between"
               >
-                <div>
-                  <p className="text-sm font-medium text-gray-900">
-                    {household.name}
-                  </p>
-                  <p className="text-xs text-gray-500">
-                    {household.members.length} member
-                    {household.members.length === 1 ? "" : "s"}
-                  </p>
+                <div className="flex items-center gap-3">
+                  <Users size={16} className="text-text-faint" />
+                  <div>
+                    <p className="text-sm font-medium text-text">
+                      {household.name}
+                    </p>
+                    <p className="text-xs text-text-muted">
+                      {household.members.length} member
+                      {household.members.length === 1 ? "" : "s"}
+                    </p>
+                  </div>
                 </div>
-                <span className="text-sm text-gray-400">View →</span>
+                <span className="text-sm text-text-faint">View →</span>
               </Link>
             </li>
           ))}

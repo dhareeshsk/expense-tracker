@@ -7,6 +7,13 @@ export const proxy = auth((req) => {
     loginUrl.searchParams.set("callbackUrl", req.nextUrl.pathname);
     return NextResponse.redirect(loginUrl);
   }
+
+  if (
+    req.nextUrl.pathname.startsWith("/admin") &&
+    req.auth.user?.role !== "SUPER_ADMIN"
+  ) {
+    return NextResponse.redirect(new URL("/dashboard", req.nextUrl.origin));
+  }
 });
 
 export const config = {
@@ -16,6 +23,9 @@ export const config = {
     "/categories/:path*",
     "/budgets/:path*",
     "/households/:path*",
+    "/reminders/:path*",
     "/settings/:path*",
+    "/profile/:path*",
+    "/admin/:path*",
   ],
 };

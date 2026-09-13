@@ -3,21 +3,42 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 model User {
-  id           String   @id @default(cuid())
-  name         String?
-  email        String   @unique
-  passwordHash String
-  createdAt    DateTime @default(now())
+  id               String    @id @default(cuid())
+  name             String?
+  email            String    @unique
+  passwordHash     String
+  role             Role      @default(USER)
+  resetToken       String?   @unique
+  resetTokenExpiry DateTime?
+  createdAt        DateTime  @default(now())
 
-  transactions Transaction[]
-  categories   Category[]
-  budgets      Budget[]
-  memberships  HouseholdMember[]
+  transactions     Transaction[]
+  categories       Category[]
+  budgets          Budget[]
+  memberships      HouseholdMember[]
+  transactionTypes  TransactionType[]
+  calculators       Calculator[]
+  reminders         Reminder[]
+  pushSubscriptions PushSubscription[]
+  notifications     Notification[]
+}
+
+enum Role {
+  USER
+  SUPER_ADMIN
+}
+
+model SiteSettings {
+  id         String   @id @default("singleton")
+  siteName   String   @default("ExpenseTrack")
+  footerText String   @default("")
+  updatedAt  DateTime @updatedAt
 }
 
 model Household {
@@ -68,22 +89,38 @@ model Category {
 }
 
 model Transaction {
-  id            String          @id @default(cuid())
-  userId        String
-  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  categoryId    String
-  category      Category        @relation(fields: [categoryId], references: [id])
-  type          TransactionType
-  amount        Decimal
-  date          DateTime
-  note          String?
-  paymentMethod String?
-  householdId   String?
-  household     Household?      @relation(fields: [householdId], references: [id])
-  createdAt     DateTime        @default(now())
+  id                String          @id @default(cuid())
+  userId            String
+  user              User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  categoryId        String
+  category          Category        @relation(fields: [categoryId], references: [id])
+  transactionTypeId String
+  transactionType   TransactionType @relation(fields: [transactionTypeId], references: [id])
+  amount            Decimal
+  date              DateTime
+  note              String?
+  paymentMethod     String?
+  householdId       String?
+  household         Household?      @relation(fields: [householdId], references: [id])
+  createdAt         DateTime        @default(now())
 
   @@index([userId, date])
   @@index([householdId, date])
+  @@index([userId, categoryId])
+  @@index([transactionTypeId])
+}
+
+model TransactionType {
+  id        String  @id @default(cuid())
+  userId    String
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  icon      String?
+  isDefault Boolean @default(false)
+
+  transactions Transaction[]
+
+  @@unique([userId, name])
 }
 
 model Budget {
@@ -109,8 +146,81 @@ model HouseholdBudget {
   @@unique([householdId, categoryName])
 }
 
-enum TransactionType {
-  income
-  expense
-  investment
+enum CalculatorType {
+  EXPENSE_SPLIT
+  BUDGET
+}
+
+model Calculator {
+  id        String         @id @default(cuid())
+  userId    String
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      CalculatorType
+  name      String
+  data      Json
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  @@index([userId, type])
+}
+
+enum ReminderStatus {
+  PENDING
+  PAID
+  MISSED
+}
+
+// Interval choice for recurring reminders. Extended beyond the spec's
+// "monthly repeat" default per explicit decision: weekly/custom intervals
+// are also needed (not just EMI/rent/utility-style monthly obligations).
+enum RecurrenceInterval {
+  WEEKLY
+  MONTHLY
+  CUSTOM_DAYS
+}
+
+model Reminder {
+  id                 String              @id @default(cuid())
+  userId             String
+  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  label              String
+  category           String
+  amount             Decimal
+  dueDate            DateTime
+  status             ReminderStatus      @default(PENDING)
+  isRecurring        Boolean             @default(false)
+  recurrenceInterval RecurrenceInterval?
+  customIntervalDays Int?
+  createdAt          DateTime            @default(now())
+
+  @@index([userId, dueDate])
+  @@index([status])
+}
+
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String // "household", "budget_alert", "reminder"
+  message   String
+  // Extra id beyond the spec's minimal model, so a notification can both
+  // deep-link to its source (a household, budget's category, or reminder)
+  // and be de-duplicated (e.g. don't re-notify the same budget breach daily).
+  relatedId String?
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId, isRead])
+  @@index([userId, createdAt])
+  @@index([type, relatedId, createdAt])
 }

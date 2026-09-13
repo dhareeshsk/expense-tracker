@@ -30,7 +30,7 @@ export async function GET(
 
   const transactions = await prisma.transaction.findMany({
     where: { householdId, date: { gte: start, lt: end } },
-    include: { category: true, user: true },
+    include: { category: true, user: true, transactionType: true },
     orderBy: { date: "desc" },
   });
 
@@ -71,7 +71,7 @@ export async function GET(
     byMember: Array.from(byMember.values()),
     transactions: transactions.map((tx) => ({
       id: tx.id,
-      type: tx.type,
+      transactionType: { name: tx.transactionType.name },
       amount: tx.amount,
       date: tx.date,
       note: tx.note,
